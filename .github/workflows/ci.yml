@@ -22,7 +22,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  GHCR_IMAGE: donkie/spoolman
+  # Owner-relative so forks publish under their own namespace. GHCR needs a
+  # lowercase name, so use the owner login, not github.repository.
+  GHCR_IMAGE: ${{ github.repository_owner }}/spoolman
 
 jobs:
   #
@@ -656,7 +658,10 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
 
+      # Docker Hub is optional: forks without the REMOTE_REGISTRY_* vars/secrets
+      # skip it and publish to GHCR only (the sign step tolerates the empty output).
       - name: Extract metadata (tags, labels) for Docker Hub
+        if: ${{ vars.REMOTE_REGISTRY_URL != '' }}
         id: meta-dh
         uses: docker/metadata-action@v5.5.1
         with:
@@ -669,6 +674,7 @@ jobs:
             type=semver,pattern={{major}}
 
       - name: Log in to DockerHub
+        if: ${{ vars.REMOTE_REGISTRY_URL != '' }}
         uses: docker/login-action@v3.3.0
         with:
           registry: ${{ vars.REMOTE_REGISTRY_URL }}
