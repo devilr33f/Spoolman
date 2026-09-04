@@ -1,6 +1,7 @@
 import { getJson } from './http';
 import { setSetting, parseSetting, type SettingResponse } from './settings';
-import { DEFAULT_LAYOUT, type LabelDesign } from '$lib/labels/types';
+import { DEFAULT_LAYOUT, type LabelDesign, type PrintLayout } from '$lib/labels/types';
+import { DEFAULT_NIIMBOT } from '$lib/labels/niimbot/options';
 
 // Label designs are stored as a JSON array in the `label_designs` server setting
 // (registered in spoolman/settings.py), mirroring how v1 stored `print_presets`.
@@ -8,7 +9,13 @@ import { DEFAULT_LAYOUT, type LabelDesign } from '$lib/labels/types';
 // Designs created before the print layout became per-design lack a `layout`;
 // backfill it (and any newly-added layout fields) from the defaults on load.
 function normalize(design: LabelDesign): LabelDesign {
-	return { ...design, layout: { ...DEFAULT_LAYOUT, ...design.layout } };
+	// Stored designs may predate any given layout field, so every level is
+	// merged over its default — the nested niimbot block included.
+	const layout = design.layout as Partial<PrintLayout> | undefined;
+	return {
+		...design,
+		layout: { ...DEFAULT_LAYOUT, ...layout, niimbot: { ...DEFAULT_NIIMBOT, ...layout?.niimbot } }
+	};
 }
 
 /**

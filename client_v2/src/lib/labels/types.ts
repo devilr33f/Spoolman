@@ -4,6 +4,7 @@
 // the `label_designs` server setting (see $lib/api/labelDesigns).
 
 import { DEFAULT_EXPORT_FORMAT, type ExportFormatId } from './export';
+import { DEFAULT_NIIMBOT, type NiimbotOptions } from './niimbot/options';
 
 export type ElementType = 'qr' | 'text' | 'swatch' | 'rect';
 
@@ -122,9 +123,10 @@ export type PaperName = 'A4' | 'A3' | 'A5' | 'Letter' | 'Legal' | 'custom';
 export interface PrintLayout {
 	/**
 	 * `sheet` tiles many labels on one page; `label` prints one label per page;
-	 * `image` skips the printer entirely and downloads the labels as files.
+	 * `image` skips the printer entirely and downloads the labels as files;
+	 * `niimbot` sends them to a Niimbot thermal printer over Bluetooth/USB.
 	 */
-	mode: 'sheet' | 'label' | 'image';
+	mode: 'sheet' | 'label' | 'image' | 'niimbot';
 	/**
 	 * Which file format `image` mode saves. Ids come from the export registry
 	 * (see $lib/labels/export) and are resolved leniently, so a design saved by a
@@ -169,6 +171,8 @@ export interface PrintLayout {
 	copies: number;
 	/** Cut-guide drawing around each cell. */
 	border: 'none' | 'border';
+	/** Thermal printer settings for `niimbot` mode (see $lib/labels/niimbot/options). */
+	niimbot: NiimbotOptions;
 }
 
 export const DEFAULT_LAYOUT: PrintLayout = {
@@ -184,7 +188,8 @@ export const DEFAULT_LAYOUT: PrintLayout = {
 	spacing: { h: 2, v: 2 },
 	skip: 0,
 	copies: 1,
-	border: 'none'
+	border: 'none',
+	niimbot: DEFAULT_NIIMBOT
 };
 
 /**
