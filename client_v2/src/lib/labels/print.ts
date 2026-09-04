@@ -26,14 +26,18 @@ export function resolveDpi(layout: Pick<PrintLayout, 'dpi'>): number {
 	return Math.min(MAX_DPI, Math.max(MIN_DPI, Math.round(dpi)));
 }
 
-/** Rasterize one label (bound to a spool) to a PNG data URL at the given DPI. */
-export function renderLabelDataUrl(
+/**
+ * Rasterize one label (bound to a spool) to a canvas at the given DPI. The
+ * canvas is detached and owned by the caller; the print/export paths turn it
+ * into a PNG, the Niimbot path reads its pixels back for 1-bit conversion.
+ */
+export function renderLabelCanvas(
 	design: LabelDesign,
 	binding: LabelBinding,
 	baseUrl: string,
 	logoImage: HTMLImageElement | null,
 	dpi: number = DEFAULT_DPI
-): string {
+): HTMLCanvasElement {
 	const pxPerMm = pxPerMmForDpi(dpi);
 	const width = design.label.w * pxPerMm;
 	const height = design.label.h * pxPerMm;
@@ -90,10 +94,21 @@ export function renderLabelDataUrl(
 	stage.add(layer);
 	layer.draw();
 
-	const url = stage.toDataURL({ pixelRatio: 1, mimeType: 'image/png' });
+	const canvas = stage.toCanvas({ pixelRatio: 1 });
 	stage.destroy();
 	container.remove();
-	return url;
+	return canvas;
+}
+
+/** Rasterize one label (bound to a spool) to a PNG data URL at the given DPI. */
+export function renderLabelDataUrl(
+	design: LabelDesign,
+	binding: LabelBinding,
+	baseUrl: string,
+	logoImage: HTMLImageElement | null,
+	dpi: number = DEFAULT_DPI
+): string {
+	return renderLabelCanvas(design, binding, baseUrl, logoImage, dpi).toDataURL('image/png');
 }
 
 function waitForImages(root: HTMLElement): Promise<void> {
