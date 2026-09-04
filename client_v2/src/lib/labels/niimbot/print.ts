@@ -23,7 +23,8 @@ export interface PrintTaskLike {
 	printInit(): Promise<void>;
 	printPage(image: EncodedImage, quantity: number): Promise<void>;
 	waitForFinished(): Promise<void>;
-	printEnd(): Promise<void>;
+	/** Resolves to whatever the library reports; the job only awaits it. */
+	printEnd(): Promise<unknown>;
 }
 
 /** niimbluelib's `printprogress` event, structurally. */
