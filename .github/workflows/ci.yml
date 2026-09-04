@@ -220,6 +220,8 @@ jobs:
   # Build tester image for integration tests
   #
   build-tester:
+    # fork: skipped — the integration/frontend tests pull donkie/spoolman* images this fork cannot publish
+    if: false
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -266,6 +268,8 @@ jobs:
   # Perform integration tests
   #
   test:
+    # fork: skipped — the integration/frontend tests pull donkie/spoolman* images this fork cannot publish
+    if: false
     needs: [build-amd64, build-tester]
     strategy:
       matrix:
@@ -296,6 +300,8 @@ jobs:
   # Perform frontend (browser) integration tests against the real image
   #
   test-frontend:
+    # fork: skipped — the integration/frontend tests pull donkie/spoolman* images this fork cannot publish
+    if: false
     needs: [build-amd64]
     runs-on: ubuntu-latest
     steps:
@@ -349,6 +355,8 @@ jobs:
   # Perform frontend (browser) integration tests for client_v2 against the real image
   #
   test-frontend-v2:
+    # fork: skipped — the integration/frontend tests pull donkie/spoolman* images this fork cannot publish
+    if: false
     needs: [build-amd64]
     runs-on: ubuntu-latest
     steps:
@@ -539,6 +547,8 @@ jobs:
   # alembic migrations) is slow, hence the generous retry budget.
   #
   test-multiarch-smoke:
+    # fork: skipped — the integration/frontend tests pull donkie/spoolman* images this fork cannot publish
+    if: false
     needs: [build-arm64, build-armv7]
     strategy:
       fail-fast: false
@@ -602,10 +612,6 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
     needs:
       [
-        test,
-        test-frontend,
-        test-frontend-v2,
-        test-multiarch-smoke,
         build-amd64,
         build-arm64,
         build-armv7,
