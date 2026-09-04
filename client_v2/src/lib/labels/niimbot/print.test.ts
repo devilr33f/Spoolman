@@ -3,6 +3,7 @@ import type { EncodedImage } from '@mmote/niimbluelib';
 import {
 	expandToFullRows,
 	jobPercent,
+	monochromeSource,
 	printToNiimbot,
 	type NiimbotJob,
 	type NiimbotPrinter,
@@ -64,7 +65,7 @@ function fakePrinter(log: string[], failAt?: 'waitForFinished', printed?: Encode
 			log.push(`task ${task} d${opt.density} t${opt.labelType} p${opt.totalPages}`);
 			return new FakeTask(log, failAt, printed);
 		},
-		encode: (_canvas, direction) => {
+		encode: (_image, direction) => {
 			log.push(`encode ${direction}`);
 			return sampleImage();
 		},
@@ -75,7 +76,7 @@ function fakePrinter(log: string[], failAt?: 'waitForFinished', printed?: Encode
 }
 
 // No DOM in vitest: the rasterizer is injected and its result never inspected.
-const stubCanvas = () => ({}) as HTMLCanvasElement;
+const stubCanvas = () => ({ data: new Uint8ClampedArray([255, 255, 255, 255]), width: 1, height: 1 });
 const binding = (id: number) => ({ spool: { id } }) as unknown as LabelBinding;
 
 function job(
@@ -247,5 +248,36 @@ describe('printToNiimbot full rows option', () => {
 			)
 		);
 		expect(printed[0].rowsData.map((r) => r.dataType)).toEqual(['void', 'pixels']);
+	});
+});
+
+describe('monochromeSource', () => {
+	const px = (...rgba: number[]) => rgba;
+	it('classifies by luma threshold so canvas drift cannot print', () => {
+		const src = monochromeSource({
+			width: 4,
+			height: 1,
+			data: new Uint8ClampedArray([
+				...px(255, 255, 255, 255),
+				...px(254, 255, 255, 255),
+				...px(1, 0, 0, 255),
+				...px(127, 127, 127, 255)
+			])
+		});
+		expect([0, 1, 2, 3].map((x) => src.getPixelColor(x, 0, 'top'))).toEqual([
+			0xffffff, 0xffffff, 0x000000, 0x000000
+		]);
+	});
+
+	it('rotates 90° clockwise for the left direction like the library does', () => {
+		// 2 wide x 3 tall; only the bottom-left pixel (x=0, y=2) is black.
+		const data = new Uint8ClampedArray(2 * 3 * 4).fill(255);
+		data.set([0, 0, 0, 255], (2 * 2 + 0) * 4);
+		const src = monochromeSource({ width: 2, height: 3, data });
+		// left: idx = (height - 1 - x) * width + y -> black at x=0, y=0
+		expect(src.getPixelColor(0, 0, 'left')).toBe(0x000000);
+		expect(src.getPixelColor(1, 0, 'left')).toBe(0xffffff);
+		expect(src.getPixelColor(0, 1, 'left')).toBe(0xffffff);
+		expect(src.getPixelColor(0, 2, 'top')).toBe(0x000000);
 	});
 });

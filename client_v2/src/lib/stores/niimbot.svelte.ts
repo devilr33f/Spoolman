@@ -1,7 +1,7 @@
 import type { NiimbotAbstractClient, PrinterModelMeta, PrintTaskName } from '@mmote/niimbluelib';
 import { NiimbotError, reasonFor, type NiimbotErrorReason } from '$lib/labels/niimbot/errors';
 import { nativeDpi } from '$lib/labels/niimbot/options';
-import type { NiimbotPrinter, PrintProgress } from '$lib/labels/niimbot/print';
+import { monochromeSource, type NiimbotPrinter, type PrintProgress } from '$lib/labels/niimbot/print';
 
 // One printer connection per browser tab, shared by the print panel and the job.
 //
@@ -142,8 +142,8 @@ class NiimbotSession {
 					statusPollIntervalMs: 100,
 					statusTimeoutMs: 8_000
 				}),
-			encode: (canvas, direction) =>
-				lib.ImageEncoder.encodeCanvas(canvas, lib.PageColorType.SingleColor, direction),
+			encode: (image, direction) =>
+				lib.ImageEncoder.encode(monochromeSource(image), lib.PageColorType.SingleColor, direction),
 			pauseHeartbeat: () => client.stopHeartbeat(),
 			// A mid-job disconnect nulls #client and the library stops its own heartbeat;
 			// only restart it if this is still the live, connected client.

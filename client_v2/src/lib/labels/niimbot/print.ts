@@ -3,7 +3,7 @@ import type { LabelDesign, PrintLayout } from '../types';
 import type { LabelBinding } from '../template';
 import { renderLabelCanvas } from '../print';
 import { getLogoImage } from '../logo';
-import { toMonochrome } from './monochrome';
+import { toMonochrome, type RgbaImage } from './monochrome';
 import {
 	clampDensity,
 	fitsHead,
@@ -45,7 +45,8 @@ export interface NiimbotPrinter {
 		task: PrintTaskName,
 		opt: { totalPages: number; density: number; labelType: number }
 	): PrintTaskLike;
-	encode(canvas: HTMLCanvasElement, direction: PrintDirection): EncodedImage;
+	/** Encode a pure black/white raster (see {@link monochromeSource}) for the wire. */
+	encode(image: RgbaImage, direction: PrintDirection): EncodedImage;
 	pauseHeartbeat(): void;
 	resumeHeartbeat(): void;
 	/** Subscribe to progress; returns the unsubscribe. */
@@ -70,11 +71,31 @@ export interface NiimbotJob {
 	/** Checked between labels only: a label in flight always runs to printEnd. */
 	signal?: AbortSignal;
 	onProgress?: (p: JobProgress) => void;
-	/** Rasterizer override; defaults to renderMonochromeCanvas. Tests inject a stub. */
-	render?: (binding: LabelBinding, dpi: number) => HTMLCanvasElement;
+	/** Rasterizer override; defaults to renderMonochromeImage. Tests inject a stub. */
+	render?: (binding: LabelBinding, dpi: number) => RgbaImage;
 }
 
-/** Render one label at `dpi` and reduce it to pure black and white in place. */
+/**
+ * Render one label at `dpi` and reduce it to pure black and white. The result
+ * is a plain pixel buffer, deliberately not written back into a canvas: on some
+ * GPU-backed Chrome canvases a putImageData/getImageData round trip shifts
+ * values by one (255 -> 254), and the printer path must never see that.
+ */
+export function renderMonochromeImage(
+	design: LabelDesign,
+	binding: LabelBinding,
+	baseUrl: string,
+	logo: HTMLImageElement | null,
+	dpi: number,
+	opt: NiimbotOptions
+): RgbaImage {
+	const canvas = renderLabelCanvas(design, binding, baseUrl, logo, dpi);
+	const ctx = canvas.getContext('2d');
+	if (!ctx) throw new NiimbotError('unknown');
+	return toMonochrome(ctx.getImageData(0, 0, canvas.width, canvas.height), opt);
+}
+
+/** The same raster as a canvas, for on-screen preview only. */
 export function renderMonochromeCanvas(
 	design: LabelDesign,
 	binding: LabelBinding,
@@ -83,13 +104,41 @@ export function renderMonochromeCanvas(
 	dpi: number,
 	opt: NiimbotOptions
 ): HTMLCanvasElement {
-	const canvas = renderLabelCanvas(design, binding, baseUrl, logo, dpi);
+	const img = renderMonochromeImage(design, binding, baseUrl, logo, dpi, opt);
+	const canvas = document.createElement('canvas');
+	canvas.width = img.width;
+	canvas.height = img.height;
 	const ctx = canvas.getContext('2d');
-	if (!ctx) throw new NiimbotError('unknown');
-	const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-	toMonochrome(img, opt);
-	ctx.putImageData(img, 0, 0);
+	if (ctx) {
+		const out = ctx.createImageData(img.width, img.height);
+		out.data.set(img.data);
+		ctx.putImageData(out, 0, 0);
+	}
 	return canvas;
+}
+
+/** Below this luma a pixel prints; well away from both 0 and 255 so drift is harmless. */
+const BLACK_BELOW = 128;
+
+/**
+ * Adapter from our pixel buffer to niimbluelib's ImageSource. Classifies by
+ * luma threshold rather than the library's exact `=== #ffffff` test, and maps
+ * `left` (rotate 90° clockwise) exactly as the library's CanvasImageSource does.
+ */
+export function monochromeSource(img: RgbaImage): {
+	readonly width: number;
+	readonly height: number;
+	getPixelColor(x: number, y: number, printDirection: PrintDirection): number;
+} {
+	const { data, width, height } = img;
+	return {
+		width,
+		height,
+		getPixelColor(x, y, printDirection) {
+			const idx = (printDirection === 'left' ? (height - 1 - x) * width + y : y * width + x) * 4;
+			return data[idx] < BLACK_BELOW ? 0x000000 : 0xffffff;
+		}
+	};
 }
 
 /** Percent of one label's job; niimblue's formula (print and feed weighted equally). */
@@ -104,7 +153,7 @@ export function jobPercent(p: PrintProgress): number {
 async function defaultRenderer(design: LabelDesign, baseUrl: string, opt: NiimbotOptions) {
 	const logo = await getLogoImage().catch(() => null);
 	return (binding: LabelBinding, dpi: number) =>
-		renderMonochromeCanvas(design, binding, baseUrl, logo, dpi, opt);
+		renderMonochromeImage(design, binding, baseUrl, logo, dpi, opt);
 }
 
 /**
