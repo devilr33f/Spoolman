@@ -159,7 +159,7 @@
 			{/if}
 			{#if visitedPrint}
 				<div class:hidden={tab !== 'print'}>
-					<PrintLayoutPanel design={working} {preselected} />
+					<PrintLayoutPanel bind:design={working} {preselected} />
 				</div>
 			{/if}
 		{:else}
