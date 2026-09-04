@@ -12,6 +12,9 @@ export default defineConfig({
 		})
 	],
 	server: { port: 5174 },
+	// niimbluelib ships CommonJS only; pre-bundling it keeps the dev server's ESM
+	// interop from tripping over its capacitor imports (niimblue does the same).
+	optimizeDeps: { include: ['@mmote/niimbluelib'] },
 	test: {
 		// Unit tests only. The Playwright a11y audit lives in e2e/ and is run by
 		// `npm run audit:a11y`; including it here would make vitest try to execute it.
