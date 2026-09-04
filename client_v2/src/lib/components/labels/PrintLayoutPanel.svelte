@@ -8,6 +8,12 @@
 	import { PAPER_NAMES, paperSize, sheetGrid } from '$lib/labels/paper';
 	import { printLabels, exportLabels, ZIP_THRESHOLD } from '$lib/labels/print';
 	import { EXPORT_FORMATS, resolveExportFormat } from '$lib/labels/export';
+	import NiimbotPanel from './NiimbotPanel.svelte';
+	import { printToNiimbot, type JobProgress } from '$lib/labels/niimbot/print';
+	import { NiimbotError, reasonFor } from '$lib/labels/niimbot/errors';
+	import { fitsHead, resolveDirection } from '$lib/labels/niimbot/options';
+	import { niimbot } from '$lib/stores/niimbot.svelte';
+	import { toasts } from '$lib/stores/toasts.svelte';
 	import { spoolSource } from '$lib/api/spoolSource';
 	import { searchAll } from '$lib/api/search';
 	import { isAbortError } from '$lib/api/http';
@@ -327,6 +333,59 @@
 		}
 	}
 
+	// Niimbot: the job runs against the tab-wide session; the button is live only
+	// when a printer is connected and the design fits its head.
+	let niimbotProgress = $state<JobProgress | null>(null);
+	let niimbotAbort: AbortController | null = null;
+	const niimbotFits = $derived(
+		fitsHead(
+			design.label,
+			resolveDirection(layout.niimbot, niimbot.meta),
+			niimbot.dpi,
+			niimbot.meta?.printheadPixels ?? 384
+		)
+	);
+	const niimbotReady = $derived(niimbot.status === 'connected' && niimbotFits && bindings.length > 0);
+	const niimbotModel = $derived(niimbot.meta?.model ?? niimbot.deviceName ?? 'Niimbot');
+
+	async function doPrintNiimbot() {
+		if (!niimbotReady) return;
+		const ctrl = new AbortController();
+		niimbotAbort = ctrl;
+		niimbotProgress = { label: 0, labels: bindings.length, percent: 0 };
+		try {
+			await niimbot.whilePrinting(() =>
+				printToNiimbot({
+					design,
+					bindings,
+					layout,
+					baseUrl: settings.baseUrl,
+					task: niimbot.task,
+					printer: niimbot.printer(),
+					signal: ctrl.signal,
+					onProgress: (p) => (niimbotProgress = p)
+				})
+			);
+			toasts.show(
+				'success',
+				m['labels.niimbotDone']({ count: bindings.length * Math.max(1, layout.copies) })
+			);
+		} catch (e) {
+			const reason = e instanceof NiimbotError ? e.reason : reasonFor(e);
+			if (reason !== 'cancelled') {
+				console.error('Niimbot print failed', e);
+				niimbot.error = reason;
+			}
+		} finally {
+			niimbotProgress = null;
+			niimbotAbort = null;
+		}
+	}
+
+	function cancelNiimbot() {
+		niimbotAbort?.abort();
+	}
+
 	function setMargin(k: 't' | 'b' | 'l' | 'r', v: number) {
 		layout.margin = { ...layout.margin, [k]: v };
 	}
@@ -427,21 +486,27 @@
 			<button class:active={layout.mode === 'image'} onclick={() => (layout.mode = 'image')}
 				>{m['labels.modeImage']()}</button
 			>
+			<button class:active={layout.mode === 'niimbot'} onclick={() => (layout.mode = 'niimbot')}
+				>{m['labels.modeNiimbot']()}</button
+			>
 		</div>
 
-		<!-- DPI applies to every mode: printing rasterizes the labels too, so a
-		     mismatch with the printer's native density blurs small labels either way. -->
-		<label class="fld"
-			>{m['labels.dpi']()}<NumberInput
-				dense
-				min={72}
-				max={1200}
-				unit="dpi"
-				value={layout.dpi}
-				onchange={(v) => (layout.dpi = v)}
-			/></label
-		>
-		<p class="help">{m['labels.dpiHint']()}</p>
+		<!-- DPI applies to every paper mode: printing rasterizes the labels too, so a
+		     mismatch with the printer's native density blurs small labels either way.
+		     A Niimbot dictates its own dpi, so the field is hidden there. -->
+		{#if layout.mode !== 'niimbot'}
+			<label class="fld"
+				>{m['labels.dpi']()}<NumberInput
+					dense
+					min={72}
+					max={1200}
+					unit="dpi"
+					value={layout.dpi}
+					onchange={(v) => (layout.dpi = v)}
+				/></label
+			>
+			<p class="help">{m['labels.dpiHint']()}</p>
+		{/if}
 
 		{#if layout.mode === 'sheet'}
 			<p class="help">{m['printing.generic.description']()}</p>
@@ -632,6 +697,18 @@
 			<div class="grid-info">
 				{m['labels.onePerLabel']({ w: design.label.w, h: design.label.h })}
 			</div>
+		{:else if layout.mode === 'niimbot'}
+			<div class="row2">
+				<label class="fld"
+					>{m['labels.copies']()}<NumberInput
+						dense
+						min={1}
+						value={layout.copies}
+						onchange={(v) => (layout.copies = Math.max(1, v))}
+					/></label
+				>
+			</div>
+			<NiimbotPanel bind:design binding={bindings[0]} />
 		{:else}
 			<!-- File export has no page geometry to configure: the file *is* the label.
 			     Copies are omitted too, since the files would be byte-identical. -->
@@ -681,6 +758,24 @@
 						? m['labels.preparing']()
 						: m['labels.saveAsFormat']({ format: exportFormat.extension.toUpperCase() })}
 				</Button>
+			{:else if layout.mode === 'niimbot'}
+				{#if niimbotProgress}
+					<span class="muted small"
+						>{m['labels.niimbotPrinting']({
+							i: niimbotProgress.label,
+							n: niimbotProgress.labels,
+							percent: niimbotProgress.percent
+						})}</span
+					>
+					<Button variant="outline" onclick={cancelNiimbot}>{m['labels.niimbotCancel']()}</Button>
+				{:else}
+					<Button onclick={doPrintNiimbot} disabled={!niimbotReady}>
+						{m['labels.niimbotPrintN']({
+							count: bindings.length * Math.max(1, layout.copies),
+							model: niimbotModel
+						})}
+					</Button>
+				{/if}
 			{:else}
 				<Button onclick={doPrint} disabled={bindings.length === 0 || printing}>
 					{printing
