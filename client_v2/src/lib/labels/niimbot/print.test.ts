@@ -229,25 +229,25 @@ describe('expandToFullRows', () => {
 });
 
 describe('printToNiimbot full rows option', () => {
-	it('sends expanded rows by default', async () => {
+	it('passes the compact stream through by default', async () => {
 		const log: string[] = [];
 		const printed: EncodedImage[] = [];
 		await printToNiimbot(job(log, { printer: fakePrinter(log, undefined, printed), bindings: [binding(1)] }));
 		expect(printed).toHaveLength(1);
-		expect(printed[0].rowsData.map((r) => r.dataType)).toEqual(['pixels', 'pixels', 'pixels']);
+		expect(printed[0].rowsData.map((r) => r.dataType)).toEqual(['void', 'pixels']);
 	});
 
-	it('passes the compact stream through when fullRows is off', async () => {
+	it('sends expanded rows when fullRows is on', async () => {
 		const log: string[] = [];
 		const printed: EncodedImage[] = [];
 		await printToNiimbot(
 			job(
 				log,
 				{ printer: fakePrinter(log, undefined, printed), bindings: [binding(1)] },
-				{ niimbot: { ...DEFAULT_LAYOUT.niimbot, fullRows: false } }
+				{ niimbot: { ...DEFAULT_LAYOUT.niimbot, fullRows: true } }
 			)
 		);
-		expect(printed[0].rowsData.map((r) => r.dataType)).toEqual(['void', 'pixels']);
+		expect(printed[0].rowsData.map((r) => r.dataType)).toEqual(['pixels', 'pixels', 'pixels']);
 	});
 });
 

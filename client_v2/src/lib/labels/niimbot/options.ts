@@ -36,8 +36,8 @@ export interface NiimbotOptions {
 	threshold: number;
 	/**
 	 * Send every row as an explicit bitmap packet instead of the library's compact
-	 * stream (blank-run and few-pixel packets). Some B1 firmware prints random
-	 * specks in blank areas with the compact stream; full rows cost ~10 ms each.
+	 * stream (blank-run and few-pixel packets). A fallback for firmware that
+	 * mishandles the compact stream; full rows cost ~10 ms each, so off by default.
 	 */
 	fullRows: boolean;
 }
@@ -48,7 +48,7 @@ export const DEFAULT_NIIMBOT: NiimbotOptions = {
 	direction: 'auto',
 	mono: 'threshold',
 	threshold: 140,
-	fullRows: true
+	fullRows: false
 };
 
 /**

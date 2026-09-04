@@ -62,7 +62,7 @@ describe('layout defaults', () => {
 			direction: 'auto',
 			mono: 'threshold',
 			threshold: 140,
-			fullRows: true
+			fullRows: false
 		});
 	});
 });
