@@ -314,6 +314,8 @@
     "labels.niimbotErrorTimeout": "The printer stopped responding.",
     "labels.niimbotErrorTooWide": "The label is wider than the print head.",
     "labels.niimbotErrorUnknown": "Printing failed.",
+    "labels.niimbotFullRows": "Send every row as a bitmap",
+    "labels.niimbotFullRowsHint": "Slower (about 10 ms per row) but fixes B1 firmware that prints random specks in blank areas with the compact row stream. Turn off only if your printer prints cleanly without it.",
     "labels.niimbotInsecure": "Web Bluetooth only works on a secure page. Open Spoolman over HTTPS, or at http://localhost, to print from here.",
     "labels.niimbotLabelType": "Label stock",
     "labels.niimbotLabelTypeBlack": "Black mark",

@@ -34,6 +34,12 @@ export interface NiimbotOptions {
 	mono: MonoMode;
 	/** 0..255 luma cut-off for `threshold`, and the quantiser for the dithers. */
 	threshold: number;
+	/**
+	 * Send every row as an explicit bitmap packet instead of the library's compact
+	 * stream (blank-run and few-pixel packets). Some B1 firmware prints random
+	 * specks in blank areas with the compact stream; full rows cost ~10 ms each.
+	 */
+	fullRows: boolean;
 }
 
 export const DEFAULT_NIIMBOT: NiimbotOptions = {
@@ -41,7 +47,8 @@ export const DEFAULT_NIIMBOT: NiimbotOptions = {
 	labelType: 1,
 	direction: 'auto',
 	mono: 'threshold',
-	threshold: 140
+	threshold: 140,
+	fullRows: true
 };
 
 /**

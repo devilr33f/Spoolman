@@ -209,6 +209,16 @@
 		>
 	</div>
 
+	<label class="chk"
+		><input
+			type="checkbox"
+			checked={opt.fullRows}
+			onchange={(e) => set('fullRows', e.currentTarget.checked)}
+		/>
+		{m['labels.niimbotFullRows']()}</label
+	>
+	<p class="help">{m['labels.niimbotFullRowsHint']()}</p>
+
 	{#if binding}
 		<div class="preview">
 			<canvas bind:this={previewCanvas}></canvas>
@@ -280,6 +290,14 @@
 		font-size: 11.5px;
 		line-height: 1.35;
 		color: var(--danger, #e5484d);
+	}
+	.chk {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		font-size: 12.5px;
+		color: var(--text-2);
+		cursor: pointer;
 	}
 	.grid-info {
 		font-size: 11.5px;

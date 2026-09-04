@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { EncodedImage } from '@mmote/niimbluelib';
 import {
+	expandToFullRows,
 	jobPercent,
 	printToNiimbot,
 	type NiimbotJob,
@@ -14,13 +15,15 @@ import type { LabelBinding } from '../template';
 class FakeTask implements PrintTaskLike {
 	constructor(
 		private log: string[],
-		private failAt?: 'waitForFinished'
+		private failAt?: 'waitForFinished',
+		private printed?: EncodedImage[]
 	) {}
 	async printInit() {
 		this.log.push('init');
 	}
-	async printPage(_img: EncodedImage, qty: number) {
+	async printPage(img: EncodedImage, qty: number) {
 		this.log.push(`page x${qty}`);
+		this.printed?.push(img);
 	}
 	async waitForFinished() {
 		if (this.failAt === 'waitForFinished') throw new Error('Timeout waiting response (waited for 0xb3)');
@@ -31,7 +34,27 @@ class FakeTask implements PrintTaskLike {
 	}
 }
 
-function fakePrinter(log: string[], failAt?: 'waitForFinished'): NiimbotPrinter {
+// Two blank rows coalesced into one void entry, then one row with a single black pixel.
+function sampleImage(): EncodedImage {
+	return {
+		pageColor: 0,
+		cols: 8,
+		rows: 3,
+		rowsData: [
+			{ dataType: 'void', rowNumber: 0, repeat: 2, blackPixelsCount: 0, redPixelsCount: 0 },
+			{
+				dataType: 'pixels',
+				rowNumber: 2,
+				repeat: 1,
+				blackPixelsCount: 1,
+				redPixelsCount: 0,
+				rowDataBlack: new Uint8Array([0x80])
+			}
+		]
+	} as EncodedImage;
+}
+
+function fakePrinter(log: string[], failAt?: 'waitForFinished', printed?: EncodedImage[]): NiimbotPrinter {
 	return {
 		dpi: 203.2,
 		printheadPixels: 384,
@@ -39,11 +62,11 @@ function fakePrinter(log: string[], failAt?: 'waitForFinished'): NiimbotPrinter 
 		densityRange: { min: 1, max: 5 },
 		newPrintTask: (task, opt) => {
 			log.push(`task ${task} d${opt.density} t${opt.labelType} p${opt.totalPages}`);
-			return new FakeTask(log, failAt);
+			return new FakeTask(log, failAt, printed);
 		},
 		encode: (_canvas, direction) => {
 			log.push(`encode ${direction}`);
-			return {} as EncodedImage;
+			return sampleImage();
 		},
 		pauseHeartbeat: () => log.push('pause'),
 		resumeHeartbeat: () => log.push('resume'),
@@ -153,5 +176,76 @@ describe('jobPercent', () => {
 		expect(jobPercent({ page: 1, pagesTotal: 2, pagePrintProgress: 100, pageFeedProgress: 100 })).toBe(50);
 		expect(jobPercent({ page: 2, pagesTotal: 2, pagePrintProgress: 100, pageFeedProgress: 100 })).toBe(100);
 		expect(jobPercent({ page: 0, pagesTotal: 0, pagePrintProgress: 0, pageFeedProgress: 0 })).toBe(0);
+	});
+});
+
+describe('expandToFullRows', () => {
+	it('turns a blank run into one zero bitmap per row', () => {
+		const out = expandToFullRows(sampleImage());
+		expect(out.rowsData.map((r) => [r.dataType, r.rowNumber, r.repeat])).toEqual([
+			['pixels', 0, 1],
+			['pixels', 1, 1],
+			['pixels', 2, 1]
+		]);
+		expect(Array.from(out.rowsData[0].rowDataBlack!)).toEqual([0]);
+		expect(Array.from(out.rowsData[2].rowDataBlack!)).toEqual([0x80]);
+		expect(out.cols).toBe(8);
+		expect(out.rows).toBe(3);
+	});
+
+	it('keeps few-pixel rows off the indexed packet and drops check rows', () => {
+		const image = sampleImage();
+		image.rowsData.push({
+			dataType: 'check',
+			rowNumber: 2,
+			repeat: 0,
+			blackPixelsCount: 0,
+			redPixelsCount: 0
+		});
+		const out = expandToFullRows(image);
+		expect(out.rowsData).toHaveLength(3);
+		expect(out.rowsData.every((r) => r.blackPixelsCount > 6)).toBe(true);
+	});
+
+	it('splits coalesced pixel rows into consecutive single rows sharing the data', () => {
+		const data = new Uint8Array([0xff]);
+		const out = expandToFullRows({
+			...sampleImage(),
+			rowsData: [
+				{
+					dataType: 'pixels',
+					rowNumber: 5,
+					repeat: 3,
+					blackPixelsCount: 8,
+					redPixelsCount: 0,
+					rowDataBlack: data
+				}
+			]
+		});
+		expect(out.rowsData.map((r) => r.rowNumber)).toEqual([5, 6, 7]);
+		expect(out.rowsData.every((r) => r.rowDataBlack === data && r.repeat === 1)).toBe(true);
+	});
+});
+
+describe('printToNiimbot full rows option', () => {
+	it('sends expanded rows by default', async () => {
+		const log: string[] = [];
+		const printed: EncodedImage[] = [];
+		await printToNiimbot(job(log, { printer: fakePrinter(log, undefined, printed), bindings: [binding(1)] }));
+		expect(printed).toHaveLength(1);
+		expect(printed[0].rowsData.map((r) => r.dataType)).toEqual(['pixels', 'pixels', 'pixels']);
+	});
+
+	it('passes the compact stream through when fullRows is off', async () => {
+		const log: string[] = [];
+		const printed: EncodedImage[] = [];
+		await printToNiimbot(
+			job(
+				log,
+				{ printer: fakePrinter(log, undefined, printed), bindings: [binding(1)] },
+				{ niimbot: { ...DEFAULT_LAYOUT.niimbot, fullRows: false } }
+			)
+		);
+		expect(printed[0].rowsData.map((r) => r.dataType)).toEqual(['void', 'pixels']);
 	});
 });

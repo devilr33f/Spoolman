@@ -1,4 +1,4 @@
-import type { EncodedImage, PrintTaskName } from '@mmote/niimbluelib';
+import type { EncodedImage, ImageRow, PrintTaskName } from '@mmote/niimbluelib';
 import type { LabelDesign, PrintLayout } from '../types';
 import type { LabelBinding } from '../template';
 import { renderLabelCanvas } from '../print';
@@ -108,6 +108,40 @@ async function defaultRenderer(design: LabelDesign, baseUrl: string, opt: Niimbo
 }
 
 /**
+ * niimbluelib emits PrintBitmapRowIndexed for rows with at most this many black
+ * pixels; marking a row above it keeps every row on the plain PrintBitmapRow path.
+ */
+const INDEXED_ROW_MAX_PIXELS = 6;
+
+/**
+ * Rewrite an encoded image so every row goes out as its own full PrintBitmapRow:
+ * blank runs become zero bitmaps, coalesced repeats are split, few-pixel rows are
+ * kept off the indexed packet, and check rows are dropped. Verified against a B1
+ * that printed random specks in blank areas with the compact stream and printed
+ * cleanly with this one.
+ */
+export function expandToFullRows(image: EncodedImage): EncodedImage {
+	const bytesPerRow = image.cols / 8;
+	const rowsData: ImageRow[] = [];
+	for (const row of image.rowsData) {
+		if (row.dataType === 'check') continue;
+		const rowDataBlack =
+			row.dataType === 'pixels' && row.rowDataBlack ? row.rowDataBlack : new Uint8Array(bytesPerRow);
+		for (let i = 0; i < row.repeat; i++) {
+			rowsData.push({
+				dataType: 'pixels',
+				rowNumber: row.rowNumber + i,
+				repeat: 1,
+				blackPixelsCount: Math.max(INDEXED_ROW_MAX_PIXELS + 1, row.blackPixelsCount),
+				redPixelsCount: 0,
+				rowDataBlack
+			});
+		}
+	}
+	return { ...image, rowsData };
+}
+
+/**
  * Print every binding, one print task each with `layout.copies` copies. Sequential
  * on purpose: the B1 parks the paper between pages of a multi-page job, and a
  * separate job per label is what every other client does and what is known to
@@ -134,7 +168,8 @@ export async function printToNiimbot(job: NiimbotJob): Promise<void> {
 		for (let i = 0; i < bindings.length; i++) {
 			if (job.signal?.aborted) throw new NiimbotError('cancelled');
 			report(i + 1, 0);
-			const encoded = printer.encode(render(bindings[i], printer.dpi), direction);
+			const raw = printer.encode(render(bindings[i], printer.dpi), direction);
+			const encoded = opt.fullRows ? expandToFullRows(raw) : raw;
 			const task = printer.newPrintTask(job.task, { totalPages: copies, density, labelType: opt.labelType });
 			const off = printer.onProgress((p) => report(i + 1, jobPercent(p)));
 			try {

@@ -61,7 +61,8 @@ describe('layout defaults', () => {
 			labelType: 1,
 			direction: 'auto',
 			mono: 'threshold',
-			threshold: 140
+			threshold: 140,
+			fullRows: true
 		});
 	});
 });
