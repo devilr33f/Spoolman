@@ -109,6 +109,7 @@ class NiimbotSession {
 	async disconnect(): Promise<void> {
 		const client = this.#client;
 		this.#reset();
+		this.error = null;
 		if (client) await client.disconnect().catch(() => undefined);
 	}
 
@@ -118,7 +119,7 @@ class NiimbotSession {
 		try {
 			return await fn();
 		} finally {
-			if (this.#client) this.status = 'connected';
+			if (this.status === 'printing') this.status = this.#client ? 'connected' : 'idle';
 		}
 	}
 
@@ -144,7 +145,11 @@ class NiimbotSession {
 			encode: (canvas, direction) =>
 				lib.ImageEncoder.encodeCanvas(canvas, lib.PageColorType.SingleColor, direction),
 			pauseHeartbeat: () => client.stopHeartbeat(),
-			resumeHeartbeat: () => client.startHeartbeat(),
+			// A mid-job disconnect nulls #client and the library stops its own heartbeat;
+			// only restart it if this is still the live, connected client.
+			resumeHeartbeat: () => {
+				if (this.#client === client && client.isConnected()) client.startHeartbeat();
+			},
 			onProgress: (cb) => {
 				const listener = (e: PrintProgress) => cb(e);
 				client.on('printprogress', listener);

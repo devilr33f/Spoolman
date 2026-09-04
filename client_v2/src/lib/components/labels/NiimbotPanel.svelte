@@ -39,6 +39,15 @@
 		LABEL_TYPES.filter((t) => !niimbot.meta || niimbot.meta.paperTypes.includes(t.value))
 	);
 
+	// A persisted labelType can be outside the connected model's paperTypes (a
+	// design saved against a different printer) — fall back rather than send a
+	// stale value the model doesn't support.
+	$effect(() => {
+		const allowed = labelTypes;
+		if (allowed.length > 0 && !allowed.some((t) => t.value === opt.labelType))
+			set('labelType', allowed[0].value);
+	});
+
 	function set<K extends keyof NiimbotOptions>(key: K, value: NiimbotOptions[K]) {
 		design.layout.niimbot = { ...design.layout.niimbot, [key]: value };
 	}

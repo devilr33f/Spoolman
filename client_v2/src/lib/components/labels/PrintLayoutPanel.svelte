@@ -10,7 +10,7 @@
 	import { EXPORT_FORMATS, resolveExportFormat } from '$lib/labels/export';
 	import NiimbotPanel from './NiimbotPanel.svelte';
 	import { printToNiimbot, type JobProgress } from '$lib/labels/niimbot/print';
-	import { NiimbotError, reasonFor } from '$lib/labels/niimbot/errors';
+	import { reasonFor } from '$lib/labels/niimbot/errors';
 	import { fitsHead, resolveDirection } from '$lib/labels/niimbot/options';
 	import { niimbot } from '$lib/stores/niimbot.svelte';
 	import { toasts } from '$lib/stores/toasts.svelte';
@@ -337,6 +337,7 @@
 	// when a printer is connected and the design fits its head.
 	let niimbotProgress = $state<JobProgress | null>(null);
 	let niimbotAbort: AbortController | null = null;
+	let niimbotCancelling = $state(false);
 	const niimbotFits = $derived(
 		fitsHead(
 			design.label,
@@ -350,9 +351,10 @@
 
 	async function doPrintNiimbot() {
 		if (!niimbotReady) return;
+		niimbot.error = null;
 		const ctrl = new AbortController();
 		niimbotAbort = ctrl;
-		niimbotProgress = { label: 0, labels: bindings.length, percent: 0 };
+		niimbotProgress = { label: 1, labels: bindings.length, percent: 0 };
 		try {
 			await niimbot.whilePrinting(() =>
 				printToNiimbot({
@@ -371,7 +373,7 @@
 				m['labels.niimbotDone']({ count: bindings.length * Math.max(1, layout.copies) })
 			);
 		} catch (e) {
-			const reason = e instanceof NiimbotError ? e.reason : reasonFor(e);
+			const reason = reasonFor(e);
 			if (reason !== 'cancelled') {
 				console.error('Niimbot print failed', e);
 				niimbot.error = reason;
@@ -379,11 +381,13 @@
 		} finally {
 			niimbotProgress = null;
 			niimbotAbort = null;
+			niimbotCancelling = false;
 		}
 	}
 
 	function cancelNiimbot() {
 		niimbotAbort?.abort();
+		niimbotCancelling = true;
 	}
 
 	function setMargin(k: 't' | 'b' | 'l' | 'r', v: number) {
@@ -767,7 +771,9 @@
 							percent: niimbotProgress.percent
 						})}</span
 					>
-					<Button variant="outline" onclick={cancelNiimbot}>{m['labels.niimbotCancel']()}</Button>
+					<Button variant="outline" onclick={cancelNiimbot} disabled={niimbotCancelling}
+						>{m['labels.niimbotCancel']()}</Button
+					>
 				{:else}
 					<Button onclick={doPrintNiimbot} disabled={!niimbotReady}>
 						{m['labels.niimbotPrintN']({

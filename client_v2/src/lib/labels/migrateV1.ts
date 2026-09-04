@@ -130,7 +130,7 @@ function mapLayout(ps: V1PrintSettings): PrintLayout {
 		// at the defaults for both.
 		dpi: DEFAULT_LAYOUT.dpi,
 		exportFormat: DEFAULT_LAYOUT.exportFormat,
-		niimbot: DEFAULT_LAYOUT.niimbot,
+		niimbot: { ...DEFAULT_LAYOUT.niimbot },
 		paper,
 		custom,
 		landscape: false,
