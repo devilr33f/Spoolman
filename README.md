@@ -24,6 +24,7 @@ Spoolman is a self-hosted web service designed to help you efficiently manage yo
   * Search, group and filter your inventory by manufacturer, material, location and more.
   * Add custom fields to tailor information to your specific needs.
   * Design and print labels with QR codes for easy spool identification and tracking.
+  * Print those labels straight to a Niimbot thermal label printer (B1 and other niimbluelib-supported models) over Bluetooth or USB from Chrome/Edge — no server-side setup. Needs the page open over HTTPS or `http://localhost`, since Web Bluetooth is only available in a secure context.
   * Contribute to its translation into 18 languages via [Weblate](https://hosted.weblate.org/projects/spoolman/).
 * **Database Support**: SQLite, PostgreSQL, MySQL, and CockroachDB.
 * **Multi-Printer Management**: Handles spool updates from several printers simultaneously.
